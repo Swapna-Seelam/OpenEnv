@@ -1,0 +1,15 @@
+name: email-triage-env
+description: Multi-step AI environment for email classification and response
+
+tasks:
+  - name: easy
+    description: Handle personal emails
+    objective: classify and take correct action
+
+  - name: medium
+    description: Handle work emails
+    objective: respond based on urgency
+
+  - name: hard
+    description: Handle critical/spam emails
+    objective: detect urgency and act correctly
