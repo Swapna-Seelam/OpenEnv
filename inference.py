@@ -11,7 +11,10 @@ try:
     api_key = os.getenv("HF_TOKEN")
 
     if api_key:
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(
+            base_url="https://api-inference.huggingface.co/v1/",
+            api_key=api_key
+        )
         USE_API = True
 except:
     USE_API = False

@@ -78,6 +78,9 @@ class EmailEnv:
         reward = 0.0
         done = False
 
+        if self.steps >= 10:
+            return self.state(), Reward(value=-1.0), True, {"error": "Infinite loop detected"}
+
         # -------- STEP 1: CLASSIFICATION -------- #
         if action.step_type == "classify":
             self.predicted_urgency = action.value

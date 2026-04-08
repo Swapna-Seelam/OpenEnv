@@ -11,6 +11,9 @@ dependencies = [
     "openai"
 ]
 
+[project.scripts]
+server = "server.app:app"
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
