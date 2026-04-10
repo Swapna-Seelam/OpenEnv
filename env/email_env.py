@@ -1,6 +1,10 @@
 import random
+import logging
 from typing import Optional, Any
 from openenv.core.env_server import Environment, Action, Observation
+
+# ---------------- LOGGING ---------------- #
+logger = logging.getLogger(__name__)
 
 # ---------------- MODELS ---------------- #
 
@@ -28,11 +32,14 @@ class EmailEnv(Environment):
         self.correct_action = None
         self.predicted_urgency = None
         self.steps = 0
+        print("[DEBUG] EmailEnv initialized")
 
     # ----------- EMAIL GENERATION ----------- #
     def generate_email(self, difficulty):
         # Normalize difficulty
         difficulty = str(difficulty).lower()
+        print(f"[DEBUG] Generating email for difficulty: {difficulty}")
+
         if "easy" in difficulty:
             emails = [
                 ("Lunch plans?", "friend", "low", "ignore"),
@@ -53,22 +60,31 @@ class EmailEnv(Environment):
         self.correct_action = self.current_email[3]
 
     # ----------- RESET ----------- #
-    def reset(self, task: Optional[Any] = None, task_name: str = "easy", **kwargs) -> EmailObservation:
+    def reset(self, task_name: str = "easy", **kwargs) -> EmailObservation:
+        """
+        Standard OpenEnv reset. 
+        Note: task_name might be a string (from CLI) or an object (from autograder).
+        """
+        print(f"[DEBUG] Reset called with task_name={task_name} (type: {type(task_name)})")
+        print(f"[DEBUG] kwargs received: {kwargs}")
+
         self.steps = 0
         self.predicted_urgency = None
         
-        # Determine task name from various potential inputs
-        name = task_name
-        if task:
-            if hasattr(task, 'name'):
-                name = task.name
-            elif isinstance(task, dict):
-                name = task.get('name', name)
-            elif isinstance(task, str):
-                name = task
+        # Handle cases where task_name is actually a Task object
+        name = "easy"
+        if hasattr(task_name, 'name'):
+            name = task_name.name
+        elif isinstance(task_name, str):
+            name = task_name
         
-        self.generate_email(name)
+        if "easy" not in name and "medium" not in name and "hard" not in name:
+            # Maybe it passed an ID like email-triage-easy
+            if "easy" in name.lower(): name = "easy"
+            elif "medium" in name.lower(): name = "medium"
+            elif "hard" in name.lower(): name = "hard"
 
+        self.generate_email(name)
         return self.state
 
     # ----------- STATE ----------- #
@@ -85,6 +101,9 @@ class EmailEnv(Environment):
 
     # ----------- STEP ----------- #
     def step(self, action: EmailAction):
+        # Log action for debugging
+        print(f"[DEBUG] Step called with action: {action}")
+
         self.steps += 1
         reward = 0.0
         done = False
@@ -95,11 +114,10 @@ class EmailEnv(Environment):
         # -------- STEP 1: CLASSIFICATION -------- #
         if action.step_type == "classify":
             self.predicted_urgency = action.value
-
             if self.predicted_urgency == self.current_email[2]:
-                reward += 0.5  # correct classification
+                reward += 0.5
             else:
-                reward += 0.1  # partial credit
+                reward += 0.1
 
         # -------- STEP 2: FINAL ACTION -------- #
         elif action.step_type == "act":
@@ -107,9 +125,11 @@ class EmailEnv(Environment):
                 reward += 0.7
             else:
                 reward += 0.2
-            done = True  # task ends after action
+            done = True
 
         # -------- PENALTY -------- #
         reward -= 0.05 * self.steps
 
-        return self.state, round(float(reward), 2), done, {}
+        final_reward = round(float(reward), 2)
+        print(f"[DEBUG] Step complete. Reward: {final_reward}, Done: {done}")
+        return self.state, final_reward, done, {}

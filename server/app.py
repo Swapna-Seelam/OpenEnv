@@ -1,8 +1,14 @@
 import uvicorn
+import openenv
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openenv.core.env_server import create_fastapi_app
 from env.email_env import EmailEnv, EmailAction, EmailObservation
+
+# Log startup information
+print(f"[STARTUP] Python Version: {sys.version}")
+print(f"[STARTUP] OpenEnv Version: {openenv.__version__ if hasattr(openenv, '__version__') else 'unknown'}")
 
 # Initialize core helper-based app
 app = create_fastapi_app(EmailEnv, EmailAction, EmailObservation)
@@ -19,10 +25,12 @@ app.add_middleware(
 # Explicit health check for autograder
 @app.get("/health")
 def health():
+    print("[DEBUG] /health called")
     return {"status": "ok"}
 
 @app.get("/")
 def root():
+    print("[DEBUG] / (root) called")
     return {
         "message": "Email Triage OpenEnv API is Running",
         "description": "Multi-step AI environment for email triage",
@@ -31,6 +39,7 @@ def root():
 
 def main():
     # HF expects port 7860
+    print("[STARTUP] Starting uvicorn server on 0.0.0.0:7860")
     uvicorn.run(app, host="0.0.0.0", port=7860)
 
 if __name__ == "__main__":
