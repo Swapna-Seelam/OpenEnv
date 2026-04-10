@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-# Install system dependencies if any
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -12,9 +12,6 @@ ENV PATH="/home/user/.local/bin:${PATH}"
 
 # Ensure absolute imports work by adding /app to PYTHONPATH
 ENV PYTHONPATH=/app
-
-# Enable the built-in OpenEnv Web Interface
-ENV ENABLE_WEB_INTERFACE=true
 
 WORKDIR /app
 
@@ -28,5 +25,6 @@ COPY --chown=user . .
 # Expose the port Hugging Face expects
 EXPOSE 7860
 
-# Run the OpenEnv server using module syntax for better path resolution
-CMD ["python", "-m", "server.app"]
+# Run the OpenEnv server using standard uvicorn deployment
+# This is more robust for Hugging Face than a main() script
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860", "--proxy-headers"]
