@@ -1,91 +1,58 @@
 import os
-import json
 import sys
-import traceback
 from openai import OpenAI
-from env.email_env import EmailEnv, EmailAction
+from env import EmailEnv
+from models import EmailAction
 
-# 1. Read environment variables with required defaults
+# Environment Variables with Defaults
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-if HF_TOKEN is None:
-    print("---------------------------------------------------------")
-    print("ERROR: HF_TOKEN environment variable is required.")
-    print("To run locally, set it first:")
-    print("  PowerShell: $env:HF_TOKEN='your_token'")
-    print("  CMD: set HF_TOKEN=your_token")
-    print("---------------------------------------------------------")
+if not HF_TOKEN:
+    print("Error: HF_TOKEN is required", file=sys.stderr)
     sys.exit(1)
 
-# 2. Initialize OpenAI client
-client = OpenAI(
-    base_url=API_BASE_URL,
-    api_key=HF_TOKEN
-)
+client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
-def run_task(task_name):
+def run_task(task_id):
     env = EmailEnv()
+    obs = env.reset(task_id=task_id)
+    
+    # [START] Exactly as required
+    print(f"[START] task={task_id} env=email-triage-env model={MODEL_NAME}")
+    
     rewards = []
-    step_n = 0
-    try:
-        # [START] line - EXACT FORMAT REQUIRED BY SCALER
-        print(f"[START] task={task_name} env=email-triage-env model={MODEL_NAME}")
-        
-        obs = env.reset(task_name=task_name)
-        
-        # Step 1: Classify
-        step_n += 1
-        prompt = f"Email: {obs.email_text}\nSender: {obs.sender_type}\nClassify urgency as high, medium, or low. Return ONLY the word."
-        
-        last_error = "null"
-        try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
-            )
-            predicted_urgency = response.choices[0].message.content.strip().lower()
-            if predicted_urgency not in ["high", "medium", "low"]:
-                predicted_urgency = "low"
-        except Exception as e:
-            predicted_urgency = "low"
-            last_error = f'"{str(e)}"'
+    
+    # Step 1: Classify
+    prompt = f"Email: {obs.email_text}\nSender: {obs.sender_type}\nClassify urgency: high, medium, low. Return only one word."
+    resp = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+    predicted = resp.choices[0].message.content.strip().lower()
+    
+    action1 = EmailAction(step_type="classify", value=predicted)
+    obs = env.step(action1) # Single object return
+    rewards.append(obs.reward)
+    
+    # [STEP] Exactly as required
+    print(f"[STEP] step=1 action=classify('{predicted}') reward={obs.reward:.2f} done={str(obs.done).lower()} error=null")
+    
+    # Step 2: Act
+    if not obs.done:
+        act_val = "reply" if predicted == "medium" else ("escalate" if predicted == "high" else "ignore")
+        action2 = EmailAction(step_type="act", value=act_val)
+        obs = env.step(action2)
+        rewards.append(obs.reward)
+        print(f"[STEP] step=2 action=act('{act_val}') reward={obs.reward:.2f} done={str(obs.done).lower()} error=null")
 
-        action_classify = EmailAction(step_type="classify", value=predicted_urgency)
-        obs, reward, done, info = env.step(action_classify)
-        rewards.append(reward)
-        
-        # [STEP] line - EXACT FORMAT REQUIRED BY SCALER
-        print(f"[STEP] step={step_n} action=classify('{predicted_urgency}') reward={reward:.2f} done={str(done).lower()} error={last_error}")
-        
-        if not done:
-            step_n += 1
-            # Step 2: Act based on classification
-            if "high" in predicted_urgency:
-                act_val = "escalate"
-            elif "medium" in predicted_urgency:
-                act_val = "reply"
-            else:
-                act_val = "ignore"
-
-            action_act = EmailAction(step_type="act", value=act_val)
-            obs, reward, done, info = env.step(action_act)
-            rewards.append(reward)
-            
-            # [STEP] line - EXACT FORMAT REQUIRED BY SCALER
-            print(f"[STEP] step={step_n} action=act('{act_val}') reward={reward:.2f} done={str(done).lower()} error=null")
-
-        # [END] line - EXACT FORMAT REQUIRED BY SCALER
-        success = sum(rewards) > 0.5
-        rewards_str = ",".join([f"{r:.2f}" for r in rewards])
-        print(f"[END] success={str(success).lower()} steps={step_n} rewards={rewards_str}")
-
-    except Exception as e:
-        print(f"[END] success=false steps={step_n} rewards=0.00 error=\"{str(e)}\"")
+    # [END] Exactly as required
+    success = sum(rewards) > 0.5
+    rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+    print(f"[END] success={str(success).lower()} steps=2 rewards={rewards_str}")
 
 if __name__ == "__main__":
-    # The autograder runs tasks sequentially
-    for t in ["easy", "medium", "hard"]:
+    for t in ["task-easy", "task-medium", "task-hard"]:
         run_task(t)
