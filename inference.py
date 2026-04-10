@@ -11,8 +11,12 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 if HF_TOKEN is None:
-    # According to guidelines, HF_TOKEN is mandatory
-    print("Error: HF_TOKEN environment variable is required", file=sys.stderr)
+    print("---------------------------------------------------------")
+    print("ERROR: HF_TOKEN environment variable is required.")
+    print("To run locally, set it first:")
+    print("  PowerShell: $env:HF_TOKEN='your_token'")
+    print("  CMD: set HF_TOKEN=your_token")
+    print("---------------------------------------------------------")
     sys.exit(1)
 
 # 2. Initialize OpenAI client
@@ -23,18 +27,19 @@ client = OpenAI(
 
 def run_task(task_name):
     env = EmailEnv()
+    rewards = []
+    step_n = 0
     try:
-        # [START] line
+        # [START] line - EXACT FORMAT REQUIRED BY SCALER
         print(f"[START] task={task_name} env=email-triage-env model={MODEL_NAME}")
         
         obs = env.reset(task_name=task_name)
-        step_n = 1
-        rewards = []
-        done = False
-        last_error = "null"
-
+        
         # Step 1: Classify
+        step_n += 1
         prompt = f"Email: {obs.email_text}\nSender: {obs.sender_type}\nClassify urgency as high, medium, or low. Return ONLY the word."
+        
+        last_error = "null"
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
@@ -46,22 +51,21 @@ def run_task(task_name):
                 predicted_urgency = "low"
         except Exception as e:
             predicted_urgency = "low"
-            last_error = str(e)
+            last_error = f'"{str(e)}"'
 
-        # Execute Classification Step
         action_classify = EmailAction(step_type="classify", value=predicted_urgency)
         obs, reward, done, info = env.step(action_classify)
         rewards.append(reward)
         
-        # [STEP] line
-        print(f"[STEP] step={step_n} action=classify('{predicted_urgency}') reward={reward:.2f} done={str(done).lower()} error={last_error if last_error != 'null' else 'null'}")
+        # [STEP] line - EXACT FORMAT REQUIRED BY SCALER
+        print(f"[STEP] step={step_n} action=classify('{predicted_urgency}') reward={reward:.2f} done={str(done).lower()} error={last_error}")
         
         if not done:
             step_n += 1
             # Step 2: Act based on classification
-            if predicted_urgency == "high":
+            if "high" in predicted_urgency:
                 act_val = "escalate"
-            elif predicted_urgency == "medium":
+            elif "medium" in predicted_urgency:
                 act_val = "reply"
             else:
                 act_val = "ignore"
@@ -70,21 +74,18 @@ def run_task(task_name):
             obs, reward, done, info = env.step(action_act)
             rewards.append(reward)
             
-            # [STEP] line
+            # [STEP] line - EXACT FORMAT REQUIRED BY SCALER
             print(f"[STEP] step={step_n} action=act('{act_val}') reward={reward:.2f} done={str(done).lower()} error=null")
 
-        # [END] line
-        success = sum(rewards) > 0.5 # basic success metric
+        # [END] line - EXACT FORMAT REQUIRED BY SCALER
+        success = sum(rewards) > 0.5
         rewards_str = ",".join([f"{r:.2f}" for r in rewards])
         print(f"[END] success={str(success).lower()} steps={step_n} rewards={rewards_str}")
 
     except Exception as e:
-        # Final [END] even on exception
-        print(f"[END] success=false steps=0 rewards=0.00 error={str(e)}")
-        traceback.print_exc()
+        print(f"[END] success=false steps={step_n} rewards=0.00 error=\"{str(e)}\"")
 
 if __name__ == "__main__":
-    # Typically, the autograder runs inference for specific tasks
-    # For a standalone run, we do a loop or just one
+    # The autograder runs tasks sequentially
     for t in ["easy", "medium", "hard"]:
         run_task(t)

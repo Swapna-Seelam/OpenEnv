@@ -1,23 +1,28 @@
-version: "1.0"
-name: email-triage-env
+spec_version: "1"
+name: openenv_project
+version: "1.0.0"
 description: Multi-step AI environment for email classification and response
+type: "gymnasium"
+runtime: "docker"
+app: "server.app:app"
+port: 7860
 
 tasks:
-  - id: email-triage-easy
+  - id: easy
     name: easy
     description: Handle personal emails
     objective: classify and take correct action
     difficulty: easy
     grader: grader:grade_easy
 
-  - id: email-triage-medium
+  - id: medium
     name: medium
     description: Handle work emails
     objective: respond based on urgency
     difficulty: medium
     grader: grader:grade_medium
 
-  - id: email-triage-hard
+  - id: hard
     name: hard
     description: Handle critical/spam emails
     objective: detect urgency and act correctly

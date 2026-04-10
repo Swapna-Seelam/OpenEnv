@@ -1,4 +1,5 @@
 import random
+from typing import Optional, Any
 from openenv.core.env_server import Environment, Action, Observation
 
 # ---------------- MODELS ---------------- #
@@ -30,20 +31,19 @@ class EmailEnv(Environment):
 
     # ----------- EMAIL GENERATION ----------- #
     def generate_email(self, difficulty):
-
-        if difficulty == "easy":
+        # Normalize difficulty
+        difficulty = str(difficulty).lower()
+        if "easy" in difficulty:
             emails = [
                 ("Lunch plans?", "friend", "low", "ignore"),
                 ("Meeting at 5 PM", "manager", "medium", "reply"),
             ]
-
-        elif difficulty == "medium":
+        elif "medium" in difficulty:
             emails = [
                 ("Reminder: submit weekly report", "manager", "medium", "reply"),
                 ("Client issue: unable to login", "client", "high", "escalate"),
             ]
-
-        else:
+        else: # hard
             emails = [
                 ("URGENT: Payment system failure affecting users", "client", "high", "escalate"),
                 ("🔥 Congratulations! You won a free iPhone", "unknown", "low", "ignore"),
@@ -53,12 +53,21 @@ class EmailEnv(Environment):
         self.correct_action = self.current_email[3]
 
     # ----------- RESET ----------- #
-    def reset(self, task_name: str = "easy", **kwargs) -> EmailObservation:
+    def reset(self, task: Optional[Any] = None, task_name: str = "easy", **kwargs) -> EmailObservation:
         self.steps = 0
         self.predicted_urgency = None
         
-        # OpenEnv autograders often pass 'task_name' or use the yaml names
-        self.generate_email(task_name)
+        # Determine task name from various potential inputs
+        name = task_name
+        if task:
+            if hasattr(task, 'name'):
+                name = task.name
+            elif isinstance(task, dict):
+                name = task.get('name', name)
+            elif isinstance(task, str):
+                name = task
+        
+        self.generate_email(name)
 
         return self.state
 
@@ -74,7 +83,7 @@ class EmailEnv(Environment):
             urgency=self.current_email[2]
         )
 
-    # ----------- STEP (MULTI-STEP) ----------- #
+    # ----------- STEP ----------- #
     def step(self, action: EmailAction):
         self.steps += 1
         reward = 0.0
@@ -94,19 +103,13 @@ class EmailEnv(Environment):
 
         # -------- STEP 2: FINAL ACTION -------- #
         elif action.step_type == "act":
-
             if action.value == self.correct_action:
                 reward += 0.7
             else:
                 reward += 0.2
-
-            # bonus for correctly handling high urgency
-            if self.current_email[2] == "high" and action.value == "escalate":
-                reward += 0.3
-
             done = True  # task ends after action
 
         # -------- PENALTY -------- #
         reward -= 0.05 * self.steps
 
-        return self.state, reward, done, {}
+        return self.state, round(float(reward), 2), done, {}
