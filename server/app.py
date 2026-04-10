@@ -1,20 +1,33 @@
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openenv.core.env_server import create_fastapi_app
 from env.email_env import EmailEnv, EmailAction, EmailObservation
 
-# Use create_fastapi_app for maximum compatibility with autograders
-# We pass the EmailEnv CLASS, not an instance
+# Initialize core helper-based app
 app = create_fastapi_app(EmailEnv, EmailAction, EmailObservation)
 
-# Add a simple health check and root message
+# Add CORS support for autograder/browser connectivity
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Explicit health check for autograder
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 @app.get("/")
 def root():
-    return {"message": "Email Triage OpenEnv API is Running"}
+    return {
+        "message": "Email Triage OpenEnv API is Running",
+        "description": "Multi-step AI environment for email triage",
+        "endpoints": ["/reset", "/step", "/state", "/health"]
+    }
 
 def main():
     # HF expects port 7860

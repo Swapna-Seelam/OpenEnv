@@ -1,82 +1,90 @@
 import os
-from env.email_env import EmailEnv, Action
-from grader import grade_easy, grade_medium, grade_hard
+import json
+import sys
+import traceback
+from openai import OpenAI
+from env.email_env import EmailEnv, EmailAction
 
-# ----------- OpenAI Setup ----------- #
-USE_API = False
-client = None
+# 1. Read environment variables with required defaults
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-try:
-    from openai import OpenAI
-    api_key = os.getenv("HF_TOKEN")
+if HF_TOKEN is None:
+    # According to guidelines, HF_TOKEN is mandatory
+    print("Error: HF_TOKEN environment variable is required", file=sys.stderr)
+    sys.exit(1)
 
-    if api_key:
-        client = OpenAI(
-            base_url="https://api-inference.huggingface.co/v1/",
-            api_key=api_key
-        )
-        USE_API = True
-except:
-    USE_API = False
+# 2. Initialize OpenAI client
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN
+)
 
-# ----------- START ----------- #
-print("[START]")
+def run_task(task_name):
+    env = EmailEnv()
+    try:
+        # [START] line
+        print(f"[START] task={task_name} env=email-triage-env model={MODEL_NAME}")
+        
+        obs = env.reset(task_name=task_name)
+        step_n = 1
+        rewards = []
+        done = False
+        last_error = "null"
 
-env = EmailEnv()
-tasks = ["easy", "medium", "hard"]
-
-for task in tasks:
-    print(f"[STEP] Task: {task}")
-
-    state = env.reset(task)
-
-    # ================= STEP 1: CLASSIFY ================= #
-    if USE_API and client:
+        # Step 1: Classify
+        prompt = f"Email: {obs.email_text}\nSender: {obs.sender_type}\nClassify urgency as high, medium, or low. Return ONLY the word."
         try:
-            prompt = f"""
-Email: {state.email_text}
-Sender: {state.sender_type}
-
-Classify urgency: high / medium / low
-Return only one word.
-"""
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=MODEL_NAME,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0
             )
-            predicted = response.choices[0].message.content.strip().lower()
-        except:
-            USE_API = False
+            predicted_urgency = response.choices[0].message.content.strip().lower()
+            if predicted_urgency not in ["high", "medium", "low"]:
+                predicted_urgency = "low"
+        except Exception as e:
+            predicted_urgency = "low"
+            last_error = str(e)
 
-    if not USE_API:
-        predicted = state.urgency  # perfect fallback
+        # Execute Classification Step
+        action_classify = EmailAction(step_type="classify", value=predicted_urgency)
+        obs, reward, done, info = env.step(action_classify)
+        rewards.append(reward)
+        
+        # [STEP] line
+        print(f"[STEP] step={step_n} action=classify('{predicted_urgency}') reward={reward:.2f} done={str(done).lower()} error={last_error if last_error != 'null' else 'null'}")
+        
+        if not done:
+            step_n += 1
+            # Step 2: Act based on classification
+            if predicted_urgency == "high":
+                act_val = "escalate"
+            elif predicted_urgency == "medium":
+                act_val = "reply"
+            else:
+                act_val = "ignore"
 
-    if predicted not in ["high", "medium", "low"]:
-        predicted = "low"
+            action_act = EmailAction(step_type="act", value=act_val)
+            obs, reward, done, info = env.step(action_act)
+            rewards.append(reward)
+            
+            # [STEP] line
+            print(f"[STEP] step={step_n} action=act('{act_val}') reward={reward:.2f} done={str(done).lower()} error=null")
 
-    action1 = Action(step_type="classify", value=predicted)
-    state, reward, done, _ = env.step(action1)
+        # [END] line
+        success = sum(rewards) > 0.5 # basic success metric
+        rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+        print(f"[END] success={str(success).lower()} steps={step_n} rewards={rewards_str}")
 
-    # ================= STEP 2: ACT ================= #
-    if predicted == "high":
-        action_text = "escalate"
-    elif predicted == "medium":
-        action_text = "reply"
-    else:
-        action_text = "ignore"
+    except Exception as e:
+        # Final [END] even on exception
+        print(f"[END] success=false steps=0 rewards=0.00 error={str(e)}")
+        traceback.print_exc()
 
-    action2 = Action(step_type="act", value=action_text)
-    state, reward, done, _ = env.step(action2)
-
-    # ================= GRADING ================= #
-    if task == "easy":
-        score = grade_easy(action_text, env.correct_action)
-    elif task == "medium":
-        score = grade_medium(action_text, env.correct_action)
-    else:
-        score = grade_hard(action_text, env.correct_action)
-
-    print(f"[STEP] Score: {score}")
-
-print("[END]")
+if __name__ == "__main__":
+    # Typically, the autograder runs inference for specific tasks
+    # For a standalone run, we do a loop or just one
+    for t in ["easy", "medium", "hard"]:
+        run_task(t)
