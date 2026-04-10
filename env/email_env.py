@@ -53,10 +53,12 @@ class EmailEnv(Environment):
         self.correct_action = self.current_email[3]
 
     # ----------- RESET ----------- #
-    def reset(self, difficulty: str = "easy") -> EmailObservation:
+    def reset(self, task_name: str = "easy", **kwargs) -> EmailObservation:
         self.steps = 0
         self.predicted_urgency = None
-        self.generate_email(difficulty)
+        
+        # OpenEnv autograders often pass 'task_name' or use the yaml names
+        self.generate_email(task_name)
 
         return self.state
 

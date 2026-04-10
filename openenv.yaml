@@ -1,5 +1,11 @@
+spec_version: 1
 name: email-triage-env
+version: "1.0.0"
 description: Multi-step AI environment for email classification and response
+type: "gymnasium"
+runtime: "docker"
+app: "server.app:app"
+port: 7860
 
 tasks:
   - name: easy
