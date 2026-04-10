@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.idea/
+.venv/
+env/__pycache__/
+server/__pycache__/
+out.txt
+output.txt
+uv.lock
+.env
